@@ -1,0 +1,121 @@
+Attempted murder  [1210],1,Violent
+"Sexual offence which occurred prior to January 4, 1983  [1300] 11",2,Sexual
+"Sexual assault, level 1  [1330]",2,Sexual
+Total sexual violations against children  [130] 12 13 14,2,Sexual
+Sexual interference  [1345] 12 13,2,Sexual
+Invitation to sexual touching  [1350] 12 13,2,Sexual
+Making sexually explicit material available to children  [1367] 13 15,2,Sexual
+Luring a child via a computer  [1370] 12 13,2,Sexual
+"Assault, level 3, aggravated  [1410]",1,Violent
+"Assault, level 2, weapon or bodily harm  [1420]",1,Violent
+"Assault, level 1  [1430]",1,Violent
+Total assaults against a peace officer  [135] 19 20,1,Violent
+Total other assaults  [140],1,Violent
+Other assaults  [1480],1,Violent
+"Total firearms, use of, discharge, pointing  [150]",3,Firearms / Weapons
+Discharge firearm with intent  [1450],3,Firearms / Weapons
+Using firearm in commission of offence  [1455],3,Firearms / Weapons
+Pointing a firearm  [1457],3,Firearms / Weapons
+Total robbery  [160] 21,4,Property
+Robbery  [1610] 21,4,Property
+Total forcible confinement or kidnapping  [510] 22,1,Violent
+Forcible confinement  [1516] 22,1,Violent
+Extortion  [1620],4,Property
+Criminal harassment  [1625] 23,1,Violent
+Uttering threats  [1627],1,Violent
+Indecent/Harassing communications  [1626] 24,1,Violent
+Total offences in relation to sexual services  [190] 16,2,Sexual
+Obtaining sexual services for consideration  [1711] 16,2,Sexual
+Total other violent violations  [180] 25,1,Violent
+Voyeurism  [1385],2,Sexual
+Non-consensual distribution of intimate images  [1390] 24,2,Sexual
+Trafficking in persons  [1525] 26,1,Violent
+Intimidation of a justice system participant or a journalist  [1621],1,Violent
+Other violent violations  [1630],1,Violent
+Total property crime violations  [200],4,Property
+Total breaking and entering  [210],4,Property
+Breaking and entering  [2120],4,Property
+Breaking and entering to steal a firearm  [2121],4,Property
+Total possession of stolen property  [211] 28 29,4,Property
+Total theft of motor vehicle  [220] 29 31,4,Property
+"Total theft over $5,000 (non-motor vehicle)  [230]",4,Property
+"Theft over $5,000  [2130]",4,Property
+"Theft over $5,000 from a motor vehicle  [2132]",4,Property
+"Shoplifting over $5,000  [2133] 32",4,Property
+"Total theft under $5,000 (non-motor vehicle)  [240]",4,Property
+"Theft $5,000 or under  [2140]",4,Property
+"Theft $5,000 or under from a motor vehicle  [2142]",4,Property
+"Shoplifting $5,000 or under  [2143] 32",4,Property
+Fraud  [2160] 33,4,Property
+Identity theft  [2165] 33,4,Property
+Identity fraud  [2166] 33,4,Property
+Total mischief  [250] 34,4,Property
+Mischief  [2170],4,Property
+Arson  [2110],4,Property
+Total other Criminal Code violations  [300],5,Other Criminal Code
+Counterfeiting  [3420] 37,5,Other Criminal Code
+Total weapons violations  [310],3,Firearms / Weapons
+Weapons possession contrary to order  [3370],3,Firearms / Weapons
+Possession of weapons  [3375],3,Firearms / Weapons
+Unsafe storage of firearms  [3395],3,Firearms / Weapons
+"Possession of, or accessing child pornography  [3455] 13 39 40 41 42 43",2,Sexual
+"Making, or distribution of child pornography  [3456] 13 40 41 42",2,Sexual
+Disturb the peace  [3430] 45,5,Other Criminal Code
+Total administration of justice violations  [330],5,Other Criminal Code
+Fail to comply with order  [3410] 13,5,Other Criminal Code
+Escape or helps to escape from lawful custody  [3440],5,Other Criminal Code
+Prisoner unlawfully at large  [3480],5,Other Criminal Code
+Fail to appear  [3510],5,Other Criminal Code
+Breach of probation  [3520] 13,5,Other Criminal Code
+Other violations against the administration of law and justice (Part IV Criminal Code)  [3730] 46,5,Other Criminal Code
+Total violations related to animal cruelty  [335] 47 48,5,Other Criminal Code
+Total other violations  [340] 49,5,Other Criminal Code
+Indecent acts  [3450],2,Sexual
+Obstruct public or peace officer  [3470],5,Other Criminal Code
+Trespass at night  [3490],5,Other Criminal Code
+Utter threats to property or animal  [3540],1,Violent
+Firearms and other offensive weapons (Part III Criminal Code)  [3720],3,Firearms / Weapons
+Offences against the person and reputation (Part VIII Criminal Code)  [3770],5,Other Criminal Code
+Other offences against the person and reputation  [3772],5,Other Criminal Code
+Offences against rights of property (Part IX Criminal Code)  [3780],4,Property
+Wilful and forbidden acts in respect of certain property (Part XI Criminal Code)  [3810] 48,4,Property
+All other Criminal Code (includes Part XII.1 Criminal Code)  [3890],5,Other Criminal Code
+Total Criminal Code traffic violations  [900] 54,6,Traffic / Driving
+Total impaired driving  [910] 54 55 56,6,Traffic / Driving
+Operation while impaired (alcohol)  [9230] 54 55,6,Traffic / Driving
+Operation while impaired (alcohol and drugs)  [9233] 54,6,Traffic / Driving
+Operation while impaired (drugs)  [9235] 54,6,Traffic / Driving
+Operation while impaired (unspecified)  [9237] 54,6,Traffic / Driving
+Failure or refusal to comply with demand (alcohol)  [9260] 54,6,Traffic / Driving
+Total other Criminal Code traffic violations  [920] 54,6,Traffic / Driving
+"Dangerous operation of motor vehicle, vessel or aircraft  [9130] 54",6,Traffic / Driving
+Dangerous operation of motor vehicle evading police  [9133] 54,6,Traffic / Driving
+Total fail to stop or remain  [930] 29 54,6,Traffic / Driving
+Driving while prohibited  [9320] 54,6,Traffic / Driving
+Total Drug violations  [401],7,Drug-related
+"Possession, cannabis (pre-legalization)  [4140] 57",7,Drug-related
+"Possession, cocaine  [4120] 58",7,Drug-related
+"Total, possession, other Controlled Drugs and Substances Act drugs  [410] 58",7,Drug-related
+"Other Controlled Drugs and Substances Act, possession  [4130] 58",7,Drug-related
+"Methamphetamines (crystal meth), possession  [4150] 58",7,Drug-related
+"Opioid (other than heroin), possession  [4170] 58 59",7,Drug-related
+"Total cannabis, trafficking, production or distribution (pre-legalization)  [420] 57 60 61",7,Drug-related
+"Cannabis, trafficking (pre-legalization)  [4240] 57 60",7,Drug-related
+"Total cocaine, trafficking, production or distribution  [430]",7,Drug-related
+"Cocaine, trafficking  [4220]",7,Drug-related
+"Total other Controlled Drugs and Substances Act drugs, trafficking, production or distribution  [440]",7,Drug-related
+"Other Controlled Drugs and Substances Act, trafficking  [4230]",7,Drug-related
+"Methamphetamines (crystal meth), trafficking  [4250]",7,Drug-related
+"Opioid (other than heroin), trafficking  [4270] 59",7,Drug-related
+Total Cannabis Act  [450] 57 61,7,Drug-related
+Total possession - Cannabis Act  [451] 57 58,7,Drug-related
+Total distribution - Cannabis Act  [452] 57,7,Drug-related
+Total sale - Cannabis Act  [453] 57,7,Drug-related
+Possession of cannabis for purpose of selling  [4934] 57,7,Drug-related
+Total production - Cannabis Act  [455] 57,7,Drug-related
+"Cultivate, propagate or harvest cannabis by adult  [4952] 57",7,Drug-related
+Youth Criminal Justice Act  [6450],8,Federal Statutes
+Total other Federal Statutes  [610],8,Federal Statutes
+Excise Act  [6400],8,Federal Statutes
+Firearms Act  [6550],8,Federal Statutes
+Other federal statutes  [6900],8,Federal Statutes
