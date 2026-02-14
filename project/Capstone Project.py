@@ -35,22 +35,31 @@ df = pd.read_csv(
 )
 
 #--------------------------------------------------------------------------
-# 1. Data Processing: data manipulation 
+# 1. Data Processing: 
 #--------------------------------------------------------------------------
-# A. Drop empty rows
+# Section A: Data cleansing
 #--------------------------------------------------------------------------
+# A. Drop rows and columns not required
+#--------------------------------------------------------------------------
+# Drop empty rows
 df = df.drop(index=0)
 df = df.drop(index=2)
+
+# Drop columns by index range (1 to 7)
+df = df.drop(df.columns[1:8], axis=1)
 
 # Inspect the resulting DataFrame
 print("1. Data Processing")
 print(df.head(6))
 
+
 #--------------------------------------------------------------------------
-# B. Create number of columns in format: offence_year
-# to fill the header, because in the first row is the name of the offence
-# (only over the first year, but over the following years are blanks.
-# and in the second row are shown the years
+# B. Create column names in the format: offence_year.  
+# Step 1: Append the year to offence names that are already present
+#         in the first year.  
+# Step 2: For subsequent years where the offence name is blank,
+#         fill in the offence name and append the corresponding year.  
+# This ensures that each column has a complete offence_year label
 #--------------------------------------------------------------------------
 
 years = df.iloc[0]             # row with years
@@ -77,16 +86,18 @@ for i in range(len(original_columns)):
 
 df.columns = new_columns
 
-
 #--------------------------------------------------------------------------
-# C. Create a new dataset summarizing years by offence with the objective to
-# identify offences with no values or non-representative values to delete
-# them later
+# Section B: Data manipulation
 #--------------------------------------------------------------------------
-# Row 0 has the years
-# Columns are the crime names
+# C. Create a new dataset summarizing total counts of each offence across
+# all years with the objective to:  
+# identify offences with missing or non-representative values 
+# (i.e., offences representing less than 0.01% of the total),  
+# which will be removed in a later step.
+#--------------------------------------------------------------------------
+# Summarize offences across all years
 rows_to_sum = slice(1, df.shape[0])  # all rows below header with actual data
-num_years = 7  # 2018-2024
+num_years = 7  # years from 2018 to 2024
 
 summary_data = {}
 
@@ -124,22 +135,28 @@ while col_idx < df.shape[1]:
     else:
         col_idx += 1
 
-# Create summary DataFrame: 1 row, 1 column per crime
+# Create summary DataFrame: 1 value per offence
 offences_df = pd.DataFrame(summary_data)
-offences_df = offences_df.iloc[:, 4:] #delete totals
-print("\nTOTALS")
-print("Total of offence types:", offences_df.shape[1])
+
+# Remove the last 5 characters from offence names
+offences_df.columns = [
+    re.sub(r"_\d{4}$", "", col).rstrip()
+    for col in offences_df.columns
+]
+
+# Delete the "Total" columns which came from the original file
+offences_df = offences_df.iloc[:, 3:] 
 
 # Print total number of offences
 offences_df = offences_df.apply(pd.to_numeric, errors='coerce')
 total = offences_df.sum(axis=1).iloc[0]
-print("Total number of offences:", total)
-
+print("\nTotal number of offences:", total)
+print("Total of offence types:", offences_df.shape[1])
 
 #--------------------------------------------------------------------------
 # D. Delete offences with non-representative values from the original dataset
 #--------------------------------------------------------------------------
-# 1. Get offences to exclude: with non-representative values
+# 1. Get offences to exclude
 #--------------------------------------------------------------------------
 threshold = 0.01 #0.01% from the total of offences
 min_todelete = total * threshold / 100
@@ -153,14 +170,14 @@ crimes_todelete = [str(c).strip().lower() for c in crimes_todelete]
     
 # Get number of offence types with non-representative values
 num_todelete = (offences_df < min_todelete).sum().sum()
-print("Number of offence types with fewer than ", min_todelete, "incidents", threshold, "%:", num_todelete)
+print("Total of offence types with fewer than ", min_todelete, "incidents", threshold, "%:", num_todelete)
 
 
 #--------------------------------------------------------------------------
 # 2. Get valid offences
 #--------------------------------------------------------------------------
 offences_df.drop(columns=[c for c in offences_df.columns if c.lower() in crimes_todelete], inplace=True)
-print("\nValid offences:", offences_df)
+print("Total of valid offences:", offences_df.shape[1])
 
 #Print the valid offences to create the Categorization.csv file
 #for col in offences_df.columns:
@@ -170,40 +187,33 @@ print("\nValid offences:", offences_df)
 #--------------------------------------------------------------------------
 # 3. Delete offences from the main dataset
 #--------------------------------------------------------------------------
-# Extract base name (remove last 5 characters, e.g., '_2018')
-crimes_todelete_base = [c[:-5] for c in crimes_todelete]
+print("\nOriginal dataset")
+print("Shape before deleting offences:", df.shape)
 
 # Identify columns to drop in df that start with the base name
-cols_to_drop = [c for c in df.columns if any(c.lower().startswith(zero) for zero in crimes_todelete_base)]
+cols_to_drop = [c for c in df.columns if any(c.lower().startswith(zero) for zero in crimes_todelete)]
 
 # Drop these columns from df
 df.drop(cols_to_drop, axis=1, inplace=True)
 
-print("Number of rows after deleting offences:",df.shape)
+print("Shape after deleting offences:",df.shape)
 
 
 #--------------------------------------------------------------------------
 # E. Create offence categorization
 #--------------------------------------------------------------------------
 
-# 1. Remove the last 5 characters from offence names in offences_df for matching
-offences_df.columns = [
-    re.sub(r"_\d{4}$", "", col).rstrip()
-    for col in offences_df.columns
-]
-
-# 2. Read the offences CSV with category assignments
+# Read the offence categories and category texts CSV with category assignments
 categorization_df = pd.read_csv("categorization.csv", header=None, dtype=str)
-categorization_df.columns = ["offence_name", "category_id", "category_text"]  # adjust column names
+categorization_df.columns = ["offence_name", "category_id", "category_text"]  
 
-# 3. Read the CSV with category texts
 category_texts_df = pd.read_csv("categories.csv", header=None, dtype=str)
-category_texts_df.columns = ["category_id", "category_text"]  # adjust if needed
+category_texts_df.columns = ["category_id", "category_text"] 
 
-# 4. Create a mapping from offence_name -> category
+# Create a mapping from offence_name -> category
 offence_to_category = {name.strip(): cat for name, cat in zip(categorization_df["offence_name"], categorization_df["category_id"])}
 
-# 4. Map category IDs to offences_df
+# Map category IDs to offences_df
 category_ids = []
 for col in offences_df:
     cat = offence_to_category.get(col.strip(), "Unknown")  # default if not found
@@ -211,7 +221,7 @@ for col in offences_df:
 
 offences_df.loc["category_id"] = category_ids
 
-# 5. Map category text
+# Map category text
 cat_text_dict = dict(zip(category_texts_df["category_id"], category_texts_df["category_text"]))
 category_texts = [cat_text_dict.get(cat, "Unknown") if cat != "Unknown" else "Unknown" for cat in category_ids]
 
@@ -220,23 +230,71 @@ offences_df.loc["category_text"] = category_texts
 #--------------------------------------------------------------------------
 # F. Set offence categories in the main dataset
 #--------------------------------------------------------------------------
-
+# 1. Create category row in the main dataset
+#--------------------------------------------------------------------------
 # Add a new row to df with the category for each offence column
-# Strip the last 5 characters (_year) and any extra spaces to match the base name
+# Strip the last 5 characters (_year) from df to match the base name
 df.loc['category_id'] = [
     offence_to_category.get(col[:-5].strip(), 'Unknown')
     for col in df.columns
 ]
 
-#pd.set_option('display.max_columns', None)
-#pd.set_option('display.width', 2000)
-#print(df.head(10))
+#--------------------------------------------------------------------------
+# 2. Create a new dataset summarized by category and year 
+#--------------------------------------------------------------------------
+
+# First row contains the year
+years = df.iloc[0]
+
+# Convert years to integer to avoid 2020 vs 2020.0 issue
+years = pd.to_numeric(years, errors='coerce')  
+years = years.dropna()                         
+years = years.astype(int)                      
+
+# Last row contains category_id
+category_ids = df.iloc[-1]
+
+# Replace category_id with category_name
+category_names = category_ids.map(cat_text_dict)
+
+# Create combined column names: CategoryName_Year
+combined_cols = [
+    f"{cat}_{year}"
+    for cat, year in zip(category_names, years)
+]
+
+# Remove first (year) and last (category) rows
+df_data = df.iloc[1:-1]
+# Delete left column with labels 
+df_data = df_data.drop(df_data.columns[0], axis=1)
+# Convert to numeric
+df_data = df_data.apply(pd.to_numeric, errors='coerce')
+# Assign new column names
+df_data.columns = combined_cols
+# Group and sum duplicate Category_Year columns
+df_data = df_data.T.groupby(df_data.columns, sort=False).sum().T
+
+# Drop columns that start with 'nan'
+cols_to_drop = [c for c in df_data.columns if str(c).startswith('nan')]
+df_data.drop(cols_to_drop, axis=1, inplace=True)
+
+# Add Provinces column
+df_data.insert(
+    loc=0,                        # index 0 -> first column
+    column='Provinces',           # name of the new column
+    value=df.iloc[1:5, 0].values  # the data to insert
+)
+
+# Optional: display all columns
+pd.set_option('display.max_columns', None)
+print("\nSummary of Crime Data by Category and Year")
+print(df_data.shape)
+print(df_data)
 
 
 #--------------------------------------------------------------------------
 # 2. Machine Learning: Clustering
 #--------------------------------------------------------------------------
-
 
 
 
