@@ -32,30 +32,25 @@ from sklearn.metrics import silhouette_score
 # 0.1 Constants 
 #--------------------------------------------------------------------------
 METADATA_ROWS = 8        # Number of metadata rows at the top of the file
-TABLE_ROWS = 7           # Number of rows corresponding to the offences table
+ROWS_PROVINCES = 4       # Number of rows (provinces)
+ROWS_HEADER = 3          # Number of rows of the header in csv file
 NUM_YEARS = 7            # Years from 2018 to 2024
 THRESHOLD = 0.01         # 0.01% from the total of offences
 LINE_SIZE = 70           # Line length in pixels
-
-# Clustering parameters
-# Number of clusters when grouping provinces based on absolute counts or proportional structure
-N_CLUSTERS_PROVINCES = 2
-
-# Number of clusters when grouping Category_Year columns to analyze patterns across offences and years
-N_CLUSTERS_CATEGORY_YEAR = 3
-
-# Seed for the random number generator to ensure reproducible clustering results
-RANDOM_STATE = 42
+FIRST_YEAR = "2018"      # First year in csv file
+LAST_YEAR = "2024"       # Last year in csv file
 
 #--------------------------------------------------------------------------
 # 0.2 Loading the file
 #--------------------------------------------------------------------------
 
+total_rows = ROWS_PROVINCES + ROWS_HEADER
+
 df = pd.read_csv(
     "data.csv",
     sep=',',                # CSV is comma-separated
     skiprows=METADATA_ROWS, # skip the header
-    nrows=TABLE_ROWS,       # read the table
+    nrows=total_rows,       # read the table
     quotechar='"',          # handle commas inside quoted text
     encoding='utf-8-sig'
 )
@@ -66,7 +61,7 @@ print("=" * LINE_SIZE)
 print("CAPSTONE PROJECT")
 print("1. Data Processing")
 print("=" * LINE_SIZE)
-print("Criminal Code violations (2018–2024) by Province and Territory")
+print("Criminal Code violations", FIRST_YEAR, "–", LAST_YEAR, "by Province and Territory")
 print("Raw Dataset:")
 print(df.iloc[:5, :7])
 print("-" * LINE_SIZE)
@@ -79,7 +74,7 @@ print("-" * LINE_SIZE)
 #--------------------------------------------------------------------------
 # 1.1.1 Drop rows and columns not required
 #--------------------------------------------------------------------------
-# # Remove irrelevant row on the header
+# Remove irrelevant row on the header
 df = df.drop(index=0)
 
 # Remove fully empty row
@@ -143,8 +138,8 @@ summary_data = {}
 col_idx = 0
 while col_idx < df.shape[1]:
     
-    # Check if this column starts a 2018 block
-    if str(df.iloc[0, col_idx]).strip() == "2018":
+    # Check if this column starts the FIRST_YEAR block
+    if str(df.iloc[0, col_idx]).strip() == FIRST_YEAR:
         # Ensure full block exists
         if col_idx + NUM_YEARS - 1 >= df.shape[1]:
             break
@@ -237,12 +232,9 @@ df.drop(cols_to_drop, axis=1, inplace=True)
 
 print("Shape after deleting offences:",df.shape)
 print("-" * LINE_SIZE)
-print("\nSubset of the Clean Dataset:")
-print(df.iloc[:, 22:32])
-print("-" * LINE_SIZE)
 
 #--------------------------------------------------------------------------
-# 1.2.3 Create offence categorization
+# 1.2.3 Create offence categorization in the main dataset
 #--------------------------------------------------------------------------
 # 1.2.3.1 Load categorization files
 #--------------------------------------------------------------------------
@@ -286,74 +278,60 @@ num_categories = category_texts_df["category_id"].nunique()
 #--------------------------------------------------------------------------
 # 1.2.3.2 Set offence categories in the main dataset
 #--------------------------------------------------------------------------
-# Problem: we need to sum all offences that belong to the same
-# category within the same year. Pandas does not allow horizontal
-# groupby directly, so we transpose the dataframe, group by the
-# combined column names (Category_Year), sum the values, and transpose back.
-# Result: df_data has one column per Category_Year, aggregated across offences.
+# Sumarize all offences by category and year
 #--------------------------------------------------------------------------
 
 # Create category row in the main dataset
-# Add a new row to df with the category_id for each offence column
-# Strip the last characters (_year) from df to match the base name
 df.loc['category_id'] = [
     offence_to_category.get(col[:-5].strip(), 'Unknown')
     for col in df.columns
 ]
 
-# Create a new dataset summarized by category and year 
-# First row contains the year
-years = df.iloc[0]
-
-# Convert years to integer to avoid 2020 vs 2020.0 issue
-years = pd.to_numeric(years, errors='coerce')  
-years = years.dropna()                         
-years = years.astype(int)                      
-
-# Last row contains category_id
-category_ids = df.iloc[-1]
-
-# Replace category_id with category_name
-category_names = category_ids.map(cat_text_dict)
-
-# Create combined column names: CategoryName_Year
-combined_cols = [
-    f"{cat}_{year}"
-    for cat, year in zip(category_names, years)
-]
-
-# Keep only province data: remove first (year) and last (category) rows
-df_data = df.iloc[1:-1]
-
-# Remove the first column containing province labels
-df_data = df_data.drop(df_data.columns[0], axis=1)
-
-# Convert to numeric
+# Keep only province data (remove first and last rows)
+df_data = df.iloc[1:-1].copy()
+df_data = df_data.drop(df_data.columns[0], axis=1)  # drop province label column
 df_data = df_data.apply(pd.to_numeric, errors='coerce')
 
-# Assign new column names
-df_data.columns = combined_cols
-
-# Group and sum duplicate Category_Year columns
-df_data = df_data.T.groupby(df_data.columns, sort=False).sum().T
-
-# Drop columns that start with 'nan'
+# Drop columns starting with 'nan'
 cols_to_drop = [c for c in df_data.columns if str(c).startswith('nan')]
 df_data.drop(cols_to_drop, axis=1, inplace=True)
 
 # Add Provinces column
-df_data.insert(
-    loc=0,                        # index 0 -> first column
-    column='Provinces',           # name of the new column
-    value=df.iloc[1:5, 0].values  # the data to insert
-)
+df_data.insert(0, 'Provinces', df.iloc[1:ROWS_PROVINCES+1, 0].values)
 
-# Display the new dataset: Summary of Crime Data by Category and Year 
-print("\nSummary of Crime Data by Category and Year:")
-print(num_categories, "categories ×", NUM_YEARS, "years (plus descriptive text)")
-print("Shape of summary matrix:", df_data.shape)
-print(df_data.iloc[:5, :10])
-print(df_data)
+# --------------------------------------------------------------------------
+# Summary by Category
+# --------------------------------------------------------------------------
+
+df_numeric = df_data.drop(columns=['Provinces'])
+
+# Transpose to group columns
+df_t = df_numeric.T
+categories = [c.split('_')[0] for c in df_t.index]
+df_t['category'] = categories
+
+# Group by category and sum
+df_by_category = df_t.groupby('category').sum().T
+df_by_category.insert(0, 'Provinces', df_data['Provinces'])
+
+print("\nSummary Table by Category:")
+print(df_by_category)
+
+# --------------------------------------------------------------------------
+# Summary by Year
+# --------------------------------------------------------------------------
+
+# Transpose again
+df_t = df_numeric.T
+years = [c.split('_')[1] for c in df_t.index]
+df_t['year'] = years
+
+# Group by year and sum
+df_by_year = df_t.groupby('year').sum().T
+df_by_year.insert(0, 'Provinces', df_data['Provinces'])
+
+print("\nSummary Table by Year:")
+print(df_by_year)
 
 
 #--------------------------------------------------------------------------
@@ -373,13 +351,12 @@ X_scaled = scaler.fit_transform(X)
 provinces = df_data["Provinces"].values  
 
 print("=" * LINE_SIZE)
-print("\nMachine Learning")
+print("\n2. Machine Learning")
 print("=" * LINE_SIZE)
 
-
-#--------------------------------------------------------------------------
-# Helper function to select best KMeans by silhouette score
-#--------------------------------------------------------------------------
+# --------------------------------------------------------------------------
+# 2.2 Select best KMeans by silhouette score
+# --------------------------------------------------------------------------
 def best_kmeans(X_data, n_range, random_state=42):
     best_score = -1
     best_n = None
@@ -397,134 +374,81 @@ def best_kmeans(X_data, n_range, random_state=42):
             best_model = kmeans
     return best_n, best_score, best_labels, best_model
 
-#--------------------------------------------------------------------------
-# 2.2.1 Absolute Crime Levels
-#--------------------------------------------------------------------------
-print("\n--- Clustering: Absolute Crime Levels ---")
-range_clusters_abs = range(2, min(len(X_scaled), 10)+1)
-n_abs, score_abs, labels_abs, kmeans_abs = best_kmeans(X_scaled, range_clusters_abs)
+# --------------------------------------------------------------------------
+# 2.3 Clustering by Category
+# --------------------------------------------------------------------------
+print("\nClustering: Provinces by Category")
+print("-" * LINE_SIZE)
 
-df_features_abs = pd.DataFrame(X_scaled, columns=provinces)
-df_features_abs['cluster_abs'] = labels_abs
-print(f"Best n_clusters: {n_abs}, Silhouette Score: {round(score_abs,3)}")
-print(df_features_abs[['cluster_abs']])
+X_cat = df_by_category.drop(columns=['Provinces']).values
+provinces = df_by_category['Provinces'].values
 
-#--------------------------------------------------------------------------
-# 2.2.2 Proportional Crime Structure
-#--------------------------------------------------------------------------
-print("\n--- Clustering: Proportional Crime Structure ---")
+scaler = RobustScaler()
+X_cat_scaled = scaler.fit_transform(X_cat)
 
-X_prop = df_data.drop(columns="Provinces").copy()
+# Range: 2 to (n_provinces-1) clusters
+range_clusters_cat = range(2, len(X_cat_scaled))
+n_cat, score_cat, labels_cat, kmeans_cat = best_kmeans(X_cat_scaled, range_clusters_cat)
 
-years = sorted({col.split("_")[-1] for col in X_prop.columns})
+df_by_category['cluster'] = labels_cat
+print(f"\nBest n_clusters: {n_cat}, Silhouette Score: {round(score_cat,3)}")
+print(df_by_category[['Provinces','cluster']])
 
-for year in years:
-    year_cols = [c for c in X_prop.columns if c.endswith(year)]
-    X_prop[year_cols] = X_prop[year_cols].div(X_prop[year_cols].sum(axis=1), axis=0)
+# PCA for visualization
+pca = PCA(n_components=2)
+X_pca = pca.fit_transform(X_cat_scaled)
+centroids_pca = pca.transform(kmeans_cat.cluster_centers_)
 
-X_prop_scaled = scaler.fit_transform(X_prop)
+plt.figure(figsize=(7,6))
+plt.scatter(X_pca[:,0], X_pca[:,1], c=labels_cat, s=100, cmap='tab10')
+plt.scatter(centroids_pca[:,0], centroids_pca[:,1], marker='X', s=200, c='black')
+for i, prov in enumerate(provinces):
+    plt.text(X_pca[i,0]+0.02, X_pca[i,1]+0.02, prov)
+plt.title("Clusters of Provinces by Category")
+plt.xlabel("PC1")
+plt.ylabel("PC2")
+plt.show()
 
-# Limitar n_clusters a filas - 1
-range_clusters_prop = range(2, len(X_prop_scaled))
-n_prop, score_prop, labels_prop, _ = best_kmeans(X_prop_scaled, range_clusters_prop)
+# --------------------------------------------------------------------------
+# 2.4 Clustering by Year
+# --------------------------------------------------------------------------
+print("\nClustering: Provinces by Year")
+print("-" * LINE_SIZE)
 
-df_data["cluster_prop"] = labels_prop
-print(df_data[["Provinces", "cluster_prop"]])
-print(f"Best n_clusters: {n_prop}, Silhouette Score: {round(score_prop,3)}")
+X_year = df_by_year.drop(columns=['Provinces']).values
+provinces = df_by_year['Provinces'].values
 
-#--------------------------------------------------------------------------
-# 2.2.3 Crime Growth Patterns
-#--------------------------------------------------------------------------
-print("\n--- Clustering: Crime Growth Patterns ---")
-
-categories = sorted({col.rsplit("_",1)[0] for col in X_prop.columns})
-growth_df = pd.DataFrame(index=df_data.index)
-
-for cat in categories:
-    cat_cols = sorted([c for c in X_prop.columns if c.startswith(cat)])
-    first_year = cat_cols[0]
-    last_year = cat_cols[-1]
-    growth_df[cat] = X_prop[last_year] - X_prop[first_year]
-
-growth_scaled = scaler.fit_transform(growth_df)
-
-# Limitar n_clusters a filas - 1
-range_clusters_growth = range(2, len(growth_scaled))
-n_growth, score_growth, labels_growth, _ = best_kmeans(growth_scaled, range_clusters_growth)
-
-df_data["cluster_growth"] = labels_growth
-print(df_data[["Provinces", "cluster_growth"]])
-print(f"Best n_clusters: {n_growth}, Silhouette Score: {round(score_growth,3)}")
-
-
-
-#--------------------------------------------------------------------------  
-# 2.3 PCA Visualization 
-#--------------------------------------------------------------------------  
-# PCA Absolute Levels  
-year = "2022"
-year_cols = [c for c in df_data.columns if c.endswith(year)]
-X_year = df_data[year_cols].T.copy()  # rows = features for this year
 X_year_scaled = scaler.fit_transform(X_year)
 
-# Limit number of clusters to max rows - 1 to avoid silhouette errors
+# Range: 2 to (n_provinces-1) clusters
 range_clusters_year = range(2, len(X_year_scaled))
 n_year, score_year, labels_year, kmeans_year = best_kmeans(X_year_scaled, range_clusters_year)
 
-# PCA transformation
-pca = PCA(n_components=2)
-X_year_pca = pca.fit_transform(X_year_scaled)
-centroids_year = pca.transform(kmeans_year.cluster_centers_)
+df_by_year['cluster'] = labels_year
+print(f"\nBest n_clusters: {n_year}, Silhouette Score: {round(score_year,3)}")
+print(df_by_year[['Provinces','cluster']])
 
-# Scatter plot with centroids and feature labels
-plt.figure(figsize=(7,6))
-plt.scatter(X_year_pca[:,0], X_year_pca[:,1], c=labels_year, s=100, label="Features")
-plt.scatter(centroids_year[:,0], centroids_year[:,1], marker='X', s=200, c='black', label="Centroids")
-for i, feature in enumerate(year_cols):
-    plt.text(X_year_pca[i,0]+0.05, X_year_pca[i,1]+0.05, feature)
-plt.title(f"K-Means Clustering (Absolute Levels) - {year}")
-plt.xlabel("Principal Component 1")
-plt.ylabel("Principal Component 2")
-plt.legend()
-plt.show()
-
-
-# PCA Proportional
-pca_prop = PCA(n_components=2)
-X_prop_pca = pca_prop.fit_transform(X_prop_scaled)
+# PCA for visualization
+pca_year = PCA(n_components=2)
+X_year_pca = pca_year.fit_transform(X_year_scaled)
+centroids_year_pca = pca_year.transform(kmeans_year.cluster_centers_)
 
 plt.figure(figsize=(7,6))
-plt.scatter(X_prop_pca[:,0], X_prop_pca[:,1], c=labels_prop, s=100, cmap='tab10')
-for i, prov in enumerate(df_data["Provinces"]):
-    plt.text(X_prop_pca[i,0]+0.02, X_prop_pca[i,1]+0.02, prov)
-plt.title("PCA: Proportional Crime Structure")
+plt.scatter(X_year_pca[:,0], X_year_pca[:,1], c=labels_year, s=100, cmap='tab10')
+plt.scatter(centroids_year_pca[:,0], centroids_year_pca[:,1], marker='X', s=200, c='black')
+for i, prov in enumerate(provinces):
+    plt.text(X_year_pca[i,0]+0.02, X_year_pca[i,1]+0.02, prov)
+plt.title("Clusters of Provinces by Year")
 plt.xlabel("PC1")
 plt.ylabel("PC2")
 plt.show()
 
-
-# PCA Growth
-pca_growth = PCA(n_components=2)
-X_growth_pca = pca_growth.fit_transform(growth_scaled)
-
-plt.figure(figsize=(7,6))
-plt.scatter(X_growth_pca[:,0], X_growth_pca[:,1], c=labels_growth, s=100, cmap='tab10')
-for i, prov in enumerate(df_data["Provinces"]):
-    plt.text(X_growth_pca[i,0]+0.02, X_growth_pca[i,1]+0.02, prov)
-plt.title("PCA: Crime Growth Patterns")
-plt.xlabel("PC1")
-plt.ylabel("PC2")
-plt.show()
-
-
-#--------------------------------------------------------------------------
-# 2.4 Silhouette Scores Summary
-#--------------------------------------------------------------------------
+# --------------------------------------------------------------------------
+# 2.5 Summary of Silhouette Scores
+# --------------------------------------------------------------------------
 print("\nSilhouette Scores Summary:")
-print(f"Absolute Levels: {round(score_abs,3)} (n_clusters={n_abs})")
-print(f"Proportional Structure: {round(score_prop,3)} (n_clusters={n_prop})")
-print(f"Growth Patterns: {round(score_growth,3)} (n_clusters={n_growth})")
-
+print(f"By Category: {round(score_cat,3)} (n_clusters={n_cat})")
+print(f"By Year: {round(score_year,3)} (n_clusters={n_year})")
 
 
 
