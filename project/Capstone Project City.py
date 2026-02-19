@@ -32,15 +32,17 @@ from sklearn.metrics import silhouette_score
 # 0.1 Constants 
 #--------------------------------------------------------------------------
 METADATA_ROWS = 8        # Number of metadata rows at the top of the file
-ROWS_PROVINCES = 279     # Number of rows (provinces)
-ROWS_HEADER = 3          # Number of rows of the header in csv file
-NUM_YEARS = 5            # Years in csv file
-THRESHOLD = 0.01         # 0.01% from the total of offences
+THRESHOLD = 0.1          # % from the total of offences
 LINE_SIZE = 70           # Line length in pixels to show sections
 FIRST_YEAR = "2020"      # First year in csv file
 LAST_YEAR = "2024"       # Last year in csv file
 
 #--------------------------------------------------------------------------
+# 0.2 Variables 
+#--------------------------------------------------------------------------
+# Number of years in the file
+num_years = int(LAST_YEAR) - int(FIRST_YEAR) + 1
+
 # Mapping: full name → abbreviation
 province_mapping = {
     "Nova Scotia": "NS",
@@ -49,17 +51,20 @@ province_mapping = {
     "Prince Edward Island": "PE"
 }
 
-#--------------------------------------------------------------------------
-# 0.2 Loading the file
-#--------------------------------------------------------------------------
+# List of patterns to remove
+remove_patterns = [
+    "Canadian National Railway Police",
+    "Codiac Regional"
+]
 
-total_rows = ROWS_PROVINCES + ROWS_HEADER
+#--------------------------------------------------------------------------
+# 0.3 Loading the file
+#--------------------------------------------------------------------------
 
 df = pd.read_csv(
     "data_complete.csv",
     sep=',',                # CSV is comma-separated
     skiprows=METADATA_ROWS, # skip the header
-    nrows=total_rows,       # read the table
     quotechar='"',          # handle commas inside quoted text
     encoding='utf-8-sig'
 )
@@ -68,54 +73,117 @@ df = pd.read_csv(
 pd.set_option('display.max_columns', None)
 print("=" * LINE_SIZE)
 print("CAPSTONE PROJECT")
-print("1. Data Processing")
 print("=" * LINE_SIZE)
 print("Criminal Code violations", FIRST_YEAR, "–", LAST_YEAR, "by Province and Territory")
-print("Raw Dataset:")
-print(df.iloc[:5, :7])
 print("-" * LINE_SIZE)
-
+print("1. Data Processing")
+print("-" * LINE_SIZE)
 
 #--------------------------------------------------------------------------
 # 1. Data Processing
 #--------------------------------------------------------------------------
 # 1.1 Data cleansing
 #--------------------------------------------------------------------------
-# 1.1.1 Drop rows and columns not required
+# 1.1.1 Drop not needed rows and columns 
 #--------------------------------------------------------------------------
-# Remove irrelevant row on the header 
-df = df.drop(index=1)
+# Remove not needed row on the header
+df = df.drop(index=2).reset_index(drop=True)
 
-# Drop uncompleted total columns (from 1 to 7)
+# Drop total columns (from 1 to 7) with totals
 df = df.drop(df.columns[1:8], axis=1)
 
 # Replace null values
 df = df.fillna(0)
 
-
+#--------------------------------------------------------------------------
+# 1.1.2 Drop rows containing provincial totals (redundant data)
+#--------------------------------------------------------------------------
 # Rename column 0 to 'Provinces'
 df.rename(columns={df.columns[0]: "Provinces"}, inplace=True)
 
 # Drop rows that start with a province name
-df = df[~df["Provinces"].apply(lambda x: any(str(x).strip().startswith(p) for p in province_mapping.keys()))].reset_index(drop=True)
+mask = df["Provinces"].astype(str).str.strip().str.startswith(tuple(province_mapping.keys()))
+df = df[~mask]
+df.reset_index(drop=True, inplace=True)
 
-# Replace province names with their abbreviations
+#--------------------------------------------------------------------------
+# 1.1.3 Drop rows with values that do not correspond to cities
+#--------------------------------------------------------------------------
+# Drop rows where the first column starts with defined values in remove_patterns
+df = df[~df['Provinces'].astype(str).str.strip().str.startswith(tuple(remove_patterns))].reset_index(drop=True)
+df = df[~df['Provinces'].str.contains('offshore', case=False, na=False)]
+
+df.reset_index(drop=True, inplace=True)
+
+#--------------------------------------------------------------------------
+# 1.1.4 Drop footer
+#--------------------------------------------------------------------------
+# Drop the footer when find the text "Symbol legend"
+first_col = df.columns[0]
+
+# Convert to numeric where possible (non-numeric -> NaN)
+col_numeric = pd.to_numeric(df[first_col], errors='coerce')
+
+# Detect numeric zeros
+numeric_zero_positions = col_numeric[col_numeric == 0].index
+
+# Detect string patterns in original column
+col_str = df[first_col].astype(str).str.strip()
+string_patterns = ["", "Symbol legend:", ".."]
+string_zero_positions = col_str[col_str.isin(string_patterns)].index
+
+# Combine all potential end-of-table positions
+end_positions = sorted(list(set(numeric_zero_positions) | set(string_zero_positions)))
+
+# Cut table at first end-of-table position (if any)
+if len(end_positions) > 0:
+    first_end_pos = end_positions[0]
+    if first_end_pos > 0:  # keep at least one row
+        df = df.iloc[:first_end_pos].copy()
+
+df.reset_index(drop=True, inplace=True)
+        
+#--------------------------------------------------------------------------
+# 1.1.5 Drop rows with no data
+#--------------------------------------------------------------------------
+# Select only data columns (ignore the first column 'Provinces')
+data_cols = df.columns[1:]
+
+# Convert data columns to numeric (invalid parsing becomes NaN)
+df.iloc[1:, 1:] = df.iloc[1:, 1:].apply(pd.to_numeric, errors='coerce')
+
+# Keep row 0 intact and remove rows where all data columns are NaN or 0
+df = pd.concat([
+    df.iloc[[0]],  # keep first row
+    df.iloc[1:][
+        ~(
+            df.iloc[1:][data_cols].isna().all(axis=1) |
+            (df.iloc[1:][data_cols] == 0).all(axis=1)
+        )
+    ]
+]).reset_index(drop=True)
+
+#--------------------------------------------------------------------------
+# 1.1.6 Get number of rows
+#--------------------------------------------------------------------------
+row_provinces = df.shape[0]
+
+
+#--------------------------------------------------------------------------
+# 1.2 Data manipulation
+#--------------------------------------------------------------------------
+# 1.2.1 Replace province names with their abbreviations
+#--------------------------------------------------------------------------
+# Replace full_name with abbreviation, discard everything after it
 for full_name, abbr in province_mapping.items():
-    # Replace full_name with abbreviation
-    # Keep only the abbreviation, discard everything after it
     df["Provinces"] = df["Provinces"].str.replace(rf"{full_name}.*", abbr, regex=True)
 
 # Strip leading/trailing whitespace
 df["Provinces"] = df["Provinces"].str.strip()
 
-#pd.set_option('display.max_rows', None)
-#print(df)
 
 #--------------------------------------------------------------------------
-# 1.1.2 Create column names in the format: offence_year.  
-# Append the year to offence names that are present in the first year      
-# For years where the offence name is blank, fill in the offence name
-# and append the corresponding year.  
+# 1.2.2 Create column names in the format: offence_year 
 #--------------------------------------------------------------------------
 
 years = df.iloc[0]             # row with years
@@ -137,6 +205,7 @@ for i in range(len(original_columns)):
     # Convert year to string
     if pd.api.types.is_number(year_raw):
         year = str(int(year_raw))  # convert 2024.0 -> "2024"
+        #df.iloc[0] = df.iloc[0].apply(lambda x: str(int(x)) if pd.notna(x) else "")
     else:
         year = str(year_raw).strip()  # keep as string (e.g., "Unnamed")
 
@@ -150,16 +219,12 @@ for i in range(len(original_columns)):
 df.columns = new_columns
 
 #--------------------------------------------------------------------------
-# 1.2 Data manipulation
-#--------------------------------------------------------------------------
-# 1.2.1 Summarize offences across all years to identify somes with
+# 1.2.3 Summarize offences across all years to identify somes with
 # non-representative values which will be removed in a later step
-# (i.e., offences with less than 0.01% of the total)
 #--------------------------------------------------------------------------
 
 # Summarize offences across all years
 rows_to_sum = slice(1, df.shape[0])  # all rows below header with actual data
-
 summary_data = {}
 
 col_idx = 0
@@ -168,10 +233,10 @@ while col_idx < df.shape[1]:
     # Check if this column starts the FIRST_YEAR block
     if str(df.iloc[0, col_idx]).strip() == FIRST_YEAR:
         # Ensure full block exists
-        if col_idx + NUM_YEARS - 1 >= df.shape[1]:
+        if col_idx + num_years - 1 >= df.shape[1]:
             break
         
-        block_idx = list(range(col_idx, col_idx + NUM_YEARS))
+        block_idx = list(range(col_idx, col_idx + num_years))
         
         # Crime name is the column name of the first column in the block
         crime_name = df.columns[col_idx]
@@ -187,12 +252,11 @@ while col_idx < df.shape[1]:
         # Sum the values
         total_value = block_numeric.sum().sum()
         
-        
         # Store in dictionary
         summary_data[crime_name] = [total_value]  # single row
         
         # Move to next block
-        col_idx += NUM_YEARS
+        col_idx += num_years
     else:
         col_idx += 1
 
@@ -212,7 +276,7 @@ print(f"\nTotal offences: {total:,}")
 print("Total offence types:", offences_df.shape[1])
 
 #--------------------------------------------------------------------------
-# 1.2.2 Delete offences with non-representative values
+# 1.2.4 Delete offences with non-representative values
 #--------------------------------------------------------------------------
 
 # Get offences to exclude
@@ -254,24 +318,19 @@ cols_to_drop = [
 # Drop these columns from df
 df.drop(cols_to_drop, axis=1, inplace=True)
 
-print("Shape after deleting offences:",df.shape)
-print("-" * LINE_SIZE)
-
-
 #--------------------------------------------------------------------------
-# 1.2.3 Sumarize by offence and by year
+# 1.2.5 Sumarize by offence and by year
 #--------------------------------------------------------------------------
-
 # Keep only province data (remove header rows)
-df_data = df.iloc[1:ROWS_PROVINCES+1, :].copy()  # includes all provinces
+df_data = df.iloc[1:row_provinces, :].copy()  # includes all provinces
 df_data = df_data.drop(df_data.columns[0], axis=1)  # drop province label column
 df_data = df_data.apply(pd.to_numeric, errors='coerce')  # convert all to numeric
 
 # Keep province names separately
-provinces = df.iloc[1:ROWS_PROVINCES+1, 0].values
+provinces = df.iloc[1:row_provinces, 0].values
 
 # --------------------------------------------------------------------------
-# Summary by Offence
+# 1.2.5.1 Summary by Offence
 # --------------------------------------------------------------------------
 
 # Keep province data
@@ -290,10 +349,11 @@ df_by_offence = df_t.groupby('offence').sum().T  # transpose back to have provin
 df_by_offence.insert(0, 'Provinces', provinces)
 
 print("\nSummary Table by Offence:")
-print(df_by_offence.head())
+print(df_by_offence)
+print(df_by_offence.shape)
 
 # --------------------------------------------------------------------------
-# Summary by Year
+# 1.2.5.2 Summary by Year
 # --------------------------------------------------------------------------
 
 # Transpose again to have years as rows
@@ -309,41 +369,31 @@ df_by_year = df_t.groupby('year').sum().T  # transpose back
 df_by_year.insert(0, 'Provinces', provinces)
 
 print("\nSummary Table by Year:")
-print(df_by_year.head())
+print(df_by_year)
+print(df_by_year.shape)
 
 
 #--------------------------------------------------------------------------
-# 2. Machine Learning: Clustering
-#--------------------------------------------------------------------------
-# 2.1 Prepare feature matrix 
+# 2. Machine Learning: Clustering and PCA
 #--------------------------------------------------------------------------
 
-# Use numeric data for features (df_data_numeric)
-X = df_data_numeric.copy()  # no 'Provinces' column here
-X = X.fillna(0)
+# Ensure provinces is a NumPy array
+provinces = np.array(provinces)
 
-# Keep provinces separately
-provinces = provinces  # already defined before
-
-# Scale features (robust to outliers)
-scaler = RobustScaler()
-X_scaled = scaler.fit_transform(X)
-
-print("Feature matrix shape:", X_scaled.shape)
-print("Number of provinces:", len(provinces))
-
-
-# --------------------------------------------------------------------------
-# 2.2 Select best KMeans by silhouette score
-# --------------------------------------------------------------------------
-def best_kmeans(X_data, n_range, random_state=42):
-    
+#--------------------------------------------------------------------------
+# 2.1 Generic function: find best KMeans using silhouette score
+#--------------------------------------------------------------------------
+def best_kmeans(X_data, n_range=range(2,10), random_state=42):
+    """
+    Fit KMeans for a range of cluster numbers, select the best using silhouette score,
+    and plot silhouette vs n_clusters.
+    """
     best_score = -1
     best_n = None
     best_labels = None
     best_model = None
     scores = []
-    
+
     for n in n_range:
         kmeans = KMeans(n_clusters=n, random_state=random_state)
         labels = kmeans.fit_predict(X_data)
@@ -369,31 +419,49 @@ def best_kmeans(X_data, n_range, random_state=42):
     
     return best_n, best_score, best_labels, best_model
 
+#--------------------------------------------------------------------------
+# 2.2 Generic function: PCA scatter plot
+#--------------------------------------------------------------------------
+def plot_pca(X_pca, labels, centroids_pca, province_names, 
+             title="PCA Plot", label_percentile=85):
+    """
+    Scatter plot of PCA components colored by cluster labels.
+    Only labels provinces whose distance from centroid is above a percentile.
+    """
 
-# --------------------------------------------------------------------------
-# 2.3 Graphics
-# --------------------------------------------------------------------------
+    plt.figure(figsize=(16,12))
 
-# Function to plot PCA scatter
-def plot_pca(X_pca, labels, centroids_pca, city_names, representative_cities=[], title="PCA Plot"):
-    plt.figure(figsize=(10,7))
-    
     # Scatter points
-    plt.scatter(X_pca[:,0], X_pca[:,1], 
-                c=labels, cmap='tab10', s=15, alpha=0.5)
-    
+    plt.scatter(X_pca[:,0], X_pca[:,1],
+                c=labels, cmap='Set1', s=50, alpha=0.6)
+
     # Centroids
     plt.scatter(centroids_pca[:,0], centroids_pca[:,1],
-                marker='X', s=200, c='black', label='Centroids')
-    
+                marker='X', s=120, c='black', label='Centroids')
+
     # Label centroids
     for i, (x, y) in enumerate(centroids_pca):
-        plt.text(x+0.02, y+0.02, f'Cluster {i}', fontsize=10, fontweight='bold')
+        plt.text(x+0.05, y+0.06, str(i), 
+                 fontsize=8, fontweight='bold', ha='left', va='bottom')
 
-    # Label representative cities
-    for i, city in enumerate(city_names):
-        if city in representative_cities:
-            plt.text(X_pca[i,0]+0.01, X_pca[i,1]+0.01, city, fontsize=8)
+    # ---- NEW PART (minimal addition) ----
+    # Compute center of PCA space
+    center = X_pca.mean(axis=0)
+
+    # Distance of each province to center
+    distances = np.linalg.norm(X_pca - center, axis=1)
+
+    # Threshold by percentile
+    threshold = np.percentile(distances, label_percentile)
+
+    # Label only far points
+    for i, prov in enumerate(province_names):
+        if distances[i] > threshold:
+            plt.text(X_pca[i,0]+0.02, 
+                     X_pca[i,1]+0.02, 
+                     prov, fontsize=7,
+                     bbox=dict(facecolor='white', alpha=0.6, edgecolor='none'))
+    # -------------------------------------
 
     plt.title(title)
     plt.xlabel("PC1")
@@ -402,125 +470,101 @@ def plot_pca(X_pca, labels, centroids_pca, city_names, representative_cities=[],
     plt.tight_layout()
     plt.show()
 
-# --------------------------------------------------------------------------
-# PCA for Absolute Levels Clustering
-# --------------------------------------------------------------------------
+#--------------------------------------------------------------------------
+# 2.3 Generic function: scale, cluster, PCA, plot
+#--------------------------------------------------------------------------
+def cluster_and_plot(X_numeric, province_names, title_prefix="", label_percentile=60):
+    """
+    Perform robust scaling, KMeans clustering, PCA, and PCA scatter plotting.
+    Returns silhouette score, best n_clusters, labels, KMeans model.
+    """
+    # Fill missing values
+    X_numeric = X_numeric.fillna(0)
 
-# Step 1: Determine best K for KMeans
-n_range = range(2, 10)  # adjust as needed
-n_abs, score_abs, labels_abs, kmeans_abs = best_kmeans(X_scaled, n_range)
+    # Scale features
+    scaler = RobustScaler()
+    X_scaled = scaler.fit_transform(X_numeric)
 
-# Step 2: PCA transformation
-pca_abs = PCA(n_components=2)
-X_abs_pca = pca_abs.fit_transform(X_scaled)
-centroids_abs_pca = pca_abs.transform(kmeans_abs.cluster_centers_)
+    # Find best KMeans
+    n_range = range(2,10)
+    best_n, best_score, labels, kmeans_model = best_kmeans(X_scaled, n_range)
 
-# Step 3: Plot PCA
-index_representative = [0, 4, 9, 12, 15]  
-representative_provinces = provinces[index_representative]
+    # PCA transformation
+    pca = PCA(n_components=2)
+    X_pca = pca.fit_transform(X_scaled)
+    centroids_pca = pca.transform(kmeans_model.cluster_centers_)
 
-plot_pca(
-    X_abs_pca,
-    labels_abs,
-    centroids_abs_pca,
-    provinces,  # use the 'provinces' array, not df_data["Provinces"]
-    representative_cities=representative_provinces,
-    title="PCA: Absolute Crime Levels"
+    # Plot PCA
+    plot_pca(
+        X_pca,
+        labels,
+        centroids_pca,
+        province_names,
+        title=f"{title_prefix} PCA",
+        label_percentile=label_percentile
+    )
+
+    return best_score, best_n, labels, kmeans_model
+
+#--------------------------------------------------------------------------
+# 2.4 Absolute Levels Clustering
+#--------------------------------------------------------------------------
+# Select representative provinces automatically (top 5 total offences)
+total_offences_per_province = df_data_numeric.sum(axis=1)
+top_indices = total_offences_per_province.sort_values(ascending=False).index[:5]
+#representative_provinces = provinces[top_indices]
+
+score_abs, n_abs, labels_abs, kmeans_abs = cluster_and_plot(
+    df_data_numeric,
+    provinces,
+    title_prefix="Absolute Crime Levels",
+    label_percentile=90
 )
 
-
-# --------------------------------------------------------------------------
-# PCA for Proportional Structure
-# --------------------------------------------------------------------------
-
-# 1. Convert counts to proportions per province
+#--------------------------------------------------------------------------
+# 2.5 Proportional Structure Clustering
+#--------------------------------------------------------------------------
 X_prop = df_data_numeric.div(df_data_numeric.sum(axis=1), axis=0).fillna(0)
-
-# 2. Scale features (robust to outliers)
-scaler = RobustScaler()
-X_prop_scaled = scaler.fit_transform(X_prop)
-
-# 3. Determine best K for KMeans using silhouette score
-n_range = range(2, 10)  # adjust as needed
-n_prop, score_prop, labels_prop, kmeans_prop = best_kmeans(X_prop_scaled, n_range)
-
-# 4. Apply PCA to 2 components
-pca_prop = PCA(n_components=2)
-X_prop_pca = pca_prop.fit_transform(X_prop_scaled)
-centroids_prop_pca = pca_prop.transform(kmeans_prop.cluster_centers_)
-
-# 5. Plot PCA
-plot_pca(
-    X_prop_pca,
-    labels_prop,
-    centroids_prop_pca,
-    provinces,  # array of province names
-    representative_cities=representative_provinces,
-    title="PCA: Proportional Structure"
+score_prop, n_prop, labels_prop, kmeans_prop = cluster_and_plot(
+    X_prop,
+    provinces,
+    title_prefix="Proportional Structure",
+    label_percentile=97
 )
 
-# --------------------------------------------------------------------------
-# PCA for Growth Patterns
-# --------------------------------------------------------------------------
-
-# 1. Calculate growth rates (year-over-year percentage change)
-X_growth = df_data_numeric.copy()
-growth_list = []
-growth_names = []
-
-# Unique offences (base names)
-offence_base_names = sorted({col.rsplit('_',1)[0] for col in X_growth.columns})
+#--------------------------------------------------------------------------
+# 2.6 Growth Patterns Clustering
+#--------------------------------------------------------------------------
+X_growth_list = []
+offence_base_names = sorted({col.rsplit('_',1)[0] for col in df_data_numeric.columns})
 
 for offence in offence_base_names:
-    # Columns for this offence, sorted by year
-    cols = sorted([c for c in X_growth.columns if c.startswith(offence)])
-    
+    cols = sorted([c for c in df_data_numeric.columns if c.startswith(offence)])
     for i in range(1, len(cols)):
-        prev = X_growth[cols[i-1]]
-        curr = X_growth[cols[i]]
-        
-        # Compute growth, avoid divide by zero
+        prev = df_data_numeric[cols[i-1]]
+        curr = df_data_numeric[cols[i]]
         growth = (curr - prev) / prev.replace(0, np.nan)
-        growth = growth.fillna(0)
-        
-        growth_list.append(growth)
-        growth_names.append(f"{offence}_growth_{cols[i]}")  # name by offence + current year
+        X_growth_list.append(growth.fillna(0))
 
-# Concatenate growth columns into DataFrame
-X_growth_df = pd.concat(growth_list, axis=1)
-X_growth_df.columns = growth_names
+X_growth_df = pd.concat(X_growth_list, axis=1).fillna(0)
 
-# 2. Scale features
-scaler = RobustScaler()
-X_growth_scaled = scaler.fit_transform(X_growth_df)
-
-# 3. Determine best KMeans
-n_range = range(2, 10)
-n_growth, score_growth, labels_growth, kmeans_growth = best_kmeans(X_growth_scaled, n_range)
-
-# 4. PCA transformation
-pca_growth = PCA(n_components=2)
-X_growth_pca = pca_growth.fit_transform(X_growth_scaled)
-centroids_growth_pca = pca_growth.transform(kmeans_growth.cluster_centers_)
-
-# 5. Plot PCA
-plot_pca(
-    X_growth_pca,
-    labels_growth,
-    centroids_growth_pca,
-    provinces,  # array of province names
-    representative_cities=representative_provinces,
-    title="PCA: Crime Growth Patterns"
+score_growth, n_growth, labels_growth, kmeans_growth = cluster_and_plot(
+    X_growth_df,
+    provinces,
+    title_prefix="Crime Growth Patterns",
+    label_percentile=70
 )
 
-
-# --------------------------------------------------------------------------
-# 2.4 Summary of Silhouette Scores
-# --------------------------------------------------------------------------
+#--------------------------------------------------------------------------
+# 2.7 Summary of Silhouette Scores
+#--------------------------------------------------------------------------
+print("-" * LINE_SIZE)
 print("\nSilhouette Scores Summary:")
 print(f"Absolute Levels: {round(score_abs,3)} (n_clusters={n_abs})")
 print(f"Proportional Structure: {round(score_prop,3)} (n_clusters={n_prop})")
 print(f"Growth Patterns: {round(score_growth,3)} (n_clusters={n_growth})")
+
+
 
 
 
