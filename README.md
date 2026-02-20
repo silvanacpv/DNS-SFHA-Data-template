@@ -49,7 +49,7 @@ The main goal is to **identify patterns in crime data** and understand structura
 
 ## How to Run
 
-Run the main analysis script in Python (>=3.9) after ensuring the required packages are installed (`pandas`, `numpy`, `matplotlib`, `scikit-learn`):  
+Run the main analysis script in Python (>=3.9) after ensuring the required packages are installed (`pandas`, `numpy`, `matplotlib`,  `seaborn`, `scikit-learn`):  
 
 ```bash
 python crime_analysis.py
